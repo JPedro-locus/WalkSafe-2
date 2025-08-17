@@ -687,30 +687,74 @@ __export(ocorrencias_id_exports, {
 });
 var import_auth = __toESM(require_auth(), 1), import_storage2 = __toESM(require_storage(), 1);
 import { Form, useLoaderData, Link as Link2 } from "@remix-run/react";
-import { useEffect as useEffect2, useMemo as useMemo2, useState as useState2 } from "react";
+import { useEffect as useEffect2, useMemo as useMemo2, useRef, useState as useState2 } from "react";
 import { jsxDEV as jsxDEV5 } from "react/jsx-dev-runtime";
 var loader = async ({ params }) => ({ id: params.id ?? null });
 function OcorrenciaDetalhe() {
-  let { id } = useLoaderData(), [occurrence, setOccurrence] = useState2(null), [user, setUser] = useState2(null);
+  let { id } = useLoaderData(), [occurrence, setOccurrence] = useState2(null), [user, setUser] = useState2(null), [comment, setComment] = useState2(""), [recSupported, setRecSupported] = useState2(!1), [listening, setListening] = useState2(!1), recRef = useRef(null), stopRequestedRef = useRef(!1);
   useEffect2(() => {
     if (!id)
       return;
     let decodedId = decodeURIComponent(id), found = (0, import_storage2.getOccurrences)().find((o) => o.id === decodedId) || null;
     setOccurrence(found), setUser((0, import_auth.getSessionUser)());
-  }, [id]);
-  let handleCommentSubmit = (event) => {
+  }, [id]), useEffect2(() => {
+    if (typeof window > "u")
+      return;
+    let AnyWin = window, SR = AnyWin.SpeechRecognition || AnyWin.webkitSpeechRecognition;
+    return setRecSupported(Boolean(SR)), () => {
+      try {
+        recRef.current?.stop?.();
+      } catch {
+      }
+    };
+  }, []);
+  let startRecording = () => {
+    if (!recSupported || listening || typeof window > "u")
+      return;
+    let AnyWin = window, SR = AnyWin.SpeechRecognition || AnyWin.webkitSpeechRecognition;
+    if (!SR)
+      return;
+    stopRequestedRef.current = !1;
+    let rec = new SR();
+    rec.lang = "pt-BR", rec.interimResults = !0, rec.continuous = !0;
+    let partial = "";
+    rec.onstart = () => setListening(!0), rec.onerror = () => setListening(!1), rec.onend = () => {
+      if (setListening(!1), !stopRequestedRef.current)
+        try {
+          rec.start(), setListening(!0);
+        } catch {
+        }
+    }, rec.onresult = (ev) => {
+      partial = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        let res = ev.results[i], txt = res[0].transcript;
+        res.isFinal ? setComment((prev) => prev ? (prev.trim() + " " + txt).trim() : txt) : partial += txt;
+      }
+      partial && setComment((prev) => (prev ? prev.replace(/\s+$/, "") + " " : "") + partial);
+    };
+    try {
+      rec.start(), recRef.current = rec, setListening(!0);
+    } catch {
+      setListening(!1);
+    }
+  }, stopRecording = () => {
+    stopRequestedRef.current = !0, setListening(!1);
+    try {
+      recRef.current?.stop?.();
+    } catch {
+    }
+  }, handleCommentSubmit = (event) => {
     if (event.preventDefault(), !occurrence || !user || !id)
       return;
-    let text = new FormData(event.currentTarget).get("comment")?.trim();
+    let text = comment.trim();
     if (!text)
       return;
     let decodedId = decodeURIComponent(id);
     (0, import_storage2.addCommentToOccurrence)(decodedId, user, text), setOccurrence(
       (prev) => prev && { ...prev, comments: [...prev.comments, { author: user, text }] }
-    ), event.target.reset();
+    ), setComment("");
   }, colors = {
     bg: "#d1fae5",
-    // verde clarinho (fundo)
     white: "#ffffff",
     text: "#1c1c0d",
     text2: "#6c6c5f",
@@ -735,7 +779,8 @@ function OcorrenciaDetalhe() {
     gap: 8,
     background: colors.white,
     borderBottom: `1px solid ${colors.border}`,
-    padding: "10px 14px"
+    padding: "12px 16px",
+    minHeight: 64
   }, backBtn = {
     gridColumn: "1 / 2",
     display: "inline-flex",
@@ -753,11 +798,11 @@ function OcorrenciaDetalhe() {
     justifyContent: "center",
     width: "100%",
     height: "100%"
-  }, logo = { maxHeight: 80, width: "auto" }, headerTitle = {
+  }, logo = { maxHeight: 90, width: "auto" }, headerTitle = {
     gridColumn: "3 / 4",
     justifySelf: "center",
     fontWeight: 800,
-    fontSize: 16,
+    fontSize: 18,
     color: colors.brandDark
   }, main = {
     flex: 1,
@@ -831,7 +876,7 @@ function OcorrenciaDetalhe() {
     display: "flex",
     gap: 10,
     alignItems: "center"
-  }, textarea = {
+  }, textareaStyle = {
     flex: 1,
     borderRadius: 12,
     border: "1px solid #d1d5db",
@@ -839,6 +884,18 @@ function OcorrenciaDetalhe() {
     minHeight: 40,
     resize: "none",
     outline: "none"
+  }, micBtn = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    border: "1px solid #d1d5db",
+    background: listening ? "#ef4444" : "#ffffff",
+    color: listening ? "#fff" : colors.brandDark,
+    cursor: recSupported ? "pointer" : "not-allowed",
+    opacity: recSupported ? 1 : 0.5
   }, sendBtn = {
     display: "inline-flex",
     alignItems: "center",
@@ -858,115 +915,115 @@ function OcorrenciaDetalhe() {
     /* @__PURE__ */ jsxDEV5("div", { style: header, children: [
       /* @__PURE__ */ jsxDEV5(Link2, { to: "/ocorrencias", style: backBtn, "aria-label": "Voltar", children: /* @__PURE__ */ jsxDEV5("span", { style: { fontSize: 18, lineHeight: 1 }, children: "\u2190" }, void 0, !1, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 273,
+        lineNumber: 388,
         columnNumber: 11
       }, this) }, void 0, !1, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 271,
+        lineNumber: 387,
         columnNumber: 9
       }, this),
       /* @__PURE__ */ jsxDEV5("div", { style: logoWrap, children: /* @__PURE__ */ jsxDEV5("img", { src: "/images/LogoSemFundo.png", alt: "WalkSafe Logo", style: logo }, void 0, !1, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 277,
+        lineNumber: 392,
         columnNumber: 11
       }, this) }, void 0, !1, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 276,
+        lineNumber: 391,
         columnNumber: 9
       }, this),
       /* @__PURE__ */ jsxDEV5("div", { style: headerTitle, children: "Detalhe da Ocorr\xEAncia" }, void 0, !1, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 280,
+        lineNumber: 395,
         columnNumber: 9
       }, this),
       /* @__PURE__ */ jsxDEV5("div", {}, void 0, !1, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 281,
+        lineNumber: 396,
         columnNumber: 9
       }, this),
       " "
     ] }, void 0, !0, {
       fileName: "app/routes/ocorrencias.$id.tsx",
-      lineNumber: 270,
+      lineNumber: 386,
       columnNumber: 7
     }, this),
     /* @__PURE__ */ jsxDEV5("main", { style: main, children: [
       /* @__PURE__ */ jsxDEV5("section", { style: card, children: [
         /* @__PURE__ */ jsxDEV5("h2", { style: title, children: occurrence.crime === "Roubo" ? "Roubo de celular" : occurrence.crime }, void 0, !1, {
           fileName: "app/routes/ocorrencias.$id.tsx",
-          lineNumber: 288,
+          lineNumber: 403,
           columnNumber: 11
         }, this),
         /* @__PURE__ */ jsxDEV5("div", { children: [
           /* @__PURE__ */ jsxDEV5("div", { style: row, children: [
             /* @__PURE__ */ jsxDEV5("div", { style: rowLabel, children: "Crime" }, void 0, !1, {
               fileName: "app/routes/ocorrencias.$id.tsx",
-              lineNumber: 294,
+              lineNumber: 409,
               columnNumber: 15
             }, this),
             /* @__PURE__ */ jsxDEV5("div", { style: rowValue, children: occurrence.crime }, void 0, !1, {
               fileName: "app/routes/ocorrencias.$id.tsx",
-              lineNumber: 295,
+              lineNumber: 410,
               columnNumber: 15
             }, this)
           ] }, void 0, !0, {
             fileName: "app/routes/ocorrencias.$id.tsx",
-            lineNumber: 293,
+            lineNumber: 408,
             columnNumber: 13
           }, this),
           /* @__PURE__ */ jsxDEV5("div", { style: row, children: [
             /* @__PURE__ */ jsxDEV5("div", { style: rowLabel, children: "Local" }, void 0, !1, {
               fileName: "app/routes/ocorrencias.$id.tsx",
-              lineNumber: 298,
+              lineNumber: 413,
               columnNumber: 15
             }, this),
             /* @__PURE__ */ jsxDEV5("div", { style: rowValue, children: occurrence.local }, void 0, !1, {
               fileName: "app/routes/ocorrencias.$id.tsx",
-              lineNumber: 299,
+              lineNumber: 414,
               columnNumber: 15
             }, this)
           ] }, void 0, !0, {
             fileName: "app/routes/ocorrencias.$id.tsx",
-            lineNumber: 297,
+            lineNumber: 412,
             columnNumber: 13
           }, this),
           /* @__PURE__ */ jsxDEV5("div", { style: row, children: [
             /* @__PURE__ */ jsxDEV5("div", { style: rowLabel, children: "Data" }, void 0, !1, {
               fileName: "app/routes/ocorrencias.$id.tsx",
-              lineNumber: 302,
+              lineNumber: 417,
               columnNumber: 15
             }, this),
             /* @__PURE__ */ jsxDEV5("div", { style: rowValue, children: new Date(occurrence.data).toLocaleString("pt-BR", {
               timeZone: "UTC"
             }) }, void 0, !1, {
               fileName: "app/routes/ocorrencias.$id.tsx",
-              lineNumber: 303,
+              lineNumber: 418,
               columnNumber: 15
             }, this)
           ] }, void 0, !0, {
             fileName: "app/routes/ocorrencias.$id.tsx",
-            lineNumber: 301,
+            lineNumber: 416,
             columnNumber: 13
           }, this),
           /* @__PURE__ */ jsxDEV5("div", { style: row, children: [
             /* @__PURE__ */ jsxDEV5("div", { style: rowLabel, children: "Descri\xE7\xE3o" }, void 0, !1, {
               fileName: "app/routes/ocorrencias.$id.tsx",
-              lineNumber: 310,
+              lineNumber: 425,
               columnNumber: 15
             }, this),
             /* @__PURE__ */ jsxDEV5("div", { style: rowValue, children: occurrence.descricao }, void 0, !1, {
               fileName: "app/routes/ocorrencias.$id.tsx",
-              lineNumber: 311,
+              lineNumber: 426,
               columnNumber: 15
             }, this)
           ] }, void 0, !0, {
             fileName: "app/routes/ocorrencias.$id.tsx",
-            lineNumber: 309,
+            lineNumber: 424,
             columnNumber: 13
           }, this)
         ] }, void 0, !0, {
           fileName: "app/routes/ocorrencias.$id.tsx",
-          lineNumber: 292,
+          lineNumber: 407,
           columnNumber: 11
         }, this),
         occurrence.numeroBo && /* @__PURE__ */ jsxDEV5("div", { style: { marginTop: 12 }, children: /* @__PURE__ */ jsxDEV5("span", { style: boChip, children: [
@@ -974,81 +1031,81 @@ function OcorrenciaDetalhe() {
           occurrence.numeroBo
         ] }, void 0, !0, {
           fileName: "app/routes/ocorrencias.$id.tsx",
-          lineNumber: 317,
+          lineNumber: 432,
           columnNumber: 15
         }, this) }, void 0, !1, {
           fileName: "app/routes/ocorrencias.$id.tsx",
-          lineNumber: 316,
+          lineNumber: 431,
           columnNumber: 13
         }, this)
       ] }, void 0, !0, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 287,
+        lineNumber: 402,
         columnNumber: 9
       }, this),
       /* @__PURE__ */ jsxDEV5("section", { style: card, children: [
         /* @__PURE__ */ jsxDEV5("h3", { style: commentsHeader, children: "Coment\xE1rios" }, void 0, !1, {
           fileName: "app/routes/ocorrencias.$id.tsx",
-          lineNumber: 324,
+          lineNumber: 439,
           columnNumber: 11
         }, this),
         /* @__PURE__ */ jsxDEV5("div", { children: [
           occurrence.comments.length === 0 && /* @__PURE__ */ jsxDEV5("p", { style: { color: colors.text2, marginTop: 8 }, children: "Ainda n\xE3o h\xE1 coment\xE1rios." }, void 0, !1, {
             fileName: "app/routes/ocorrencias.$id.tsx",
-            lineNumber: 329,
+            lineNumber: 443,
             columnNumber: 15
           }, this),
           occurrence.comments.map((c, i) => /* @__PURE__ */ jsxDEV5("div", { style: commentItem, children: [
             /* @__PURE__ */ jsxDEV5("div", { style: avatar, children: initials(c.author) }, void 0, !1, {
               fileName: "app/routes/ocorrencias.$id.tsx",
-              lineNumber: 336,
+              lineNumber: 450,
               columnNumber: 17
             }, this),
             /* @__PURE__ */ jsxDEV5("div", { style: { flex: 1 }, children: [
               /* @__PURE__ */ jsxDEV5("div", { style: commentNameLine, children: [
                 /* @__PURE__ */ jsxDEV5("span", { style: commentName, children: c.author }, void 0, !1, {
                   fileName: "app/routes/ocorrencias.$id.tsx",
-                  lineNumber: 339,
+                  lineNumber: 453,
                   columnNumber: 21
                 }, this),
                 /* @__PURE__ */ jsxDEV5("span", { style: commentTime, children: i === 0 ? "2h atr\xE1s" : "1h atr\xE1s" }, void 0, !1, {
                   fileName: "app/routes/ocorrencias.$id.tsx",
-                  lineNumber: 341,
+                  lineNumber: 454,
                   columnNumber: 21
                 }, this)
               ] }, void 0, !0, {
                 fileName: "app/routes/ocorrencias.$id.tsx",
-                lineNumber: 338,
+                lineNumber: 452,
                 columnNumber: 19
               }, this),
               /* @__PURE__ */ jsxDEV5("div", { style: { color: colors.text2, fontSize: 14 }, children: c.text }, void 0, !1, {
                 fileName: "app/routes/ocorrencias.$id.tsx",
-                lineNumber: 343,
+                lineNumber: 456,
                 columnNumber: 19
               }, this)
             ] }, void 0, !0, {
               fileName: "app/routes/ocorrencias.$id.tsx",
-              lineNumber: 337,
+              lineNumber: 451,
               columnNumber: 17
             }, this)
           ] }, i, !0, {
             fileName: "app/routes/ocorrencias.$id.tsx",
-            lineNumber: 335,
+            lineNumber: 449,
             columnNumber: 15
           }, this))
         ] }, void 0, !0, {
           fileName: "app/routes/ocorrencias.$id.tsx",
-          lineNumber: 327,
+          lineNumber: 441,
           columnNumber: 11
         }, this)
       ] }, void 0, !0, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 323,
+        lineNumber: 438,
         columnNumber: 9
       }, this)
     ] }, void 0, !0, {
       fileName: "app/routes/ocorrencias.$id.tsx",
-      lineNumber: 285,
+      lineNumber: 400,
       columnNumber: 7
     }, this),
     /* @__PURE__ */ jsxDEV5("footer", { style: footer, children: /* @__PURE__ */ jsxDEV5(Form, { method: "post", onSubmit: handleCommentSubmit, style: composer, children: [
@@ -1059,92 +1116,122 @@ function OcorrenciaDetalhe() {
           placeholder: user ? "Adicionar coment\xE1rio..." : "Fa\xE7a login para comentar",
           disabled: !user,
           rows: 1,
-          style: textarea
+          style: textareaStyle,
+          value: comment,
+          onChange: (e) => setComment(e.target.value)
         },
         void 0,
         !1,
         {
           fileName: "app/routes/ocorrencias.$id.tsx",
-          lineNumber: 354,
+          lineNumber: 467,
           columnNumber: 11
         },
         this
       ),
-      /* @__PURE__ */ jsxDEV5("button", { type: "submit", style: sendBtn, disabled: !user, children: [
+      /* @__PURE__ */ jsxDEV5(
+        "button",
+        {
+          type: "button",
+          "aria-label": listening ? "Parar grava\xE7\xE3o" : "Gravar coment\xE1rio por voz",
+          title: recSupported ? listening ? "Parar" : "Falar" : "Seu navegador n\xE3o suporta grava\xE7\xE3o de voz",
+          style: micBtn,
+          onClick: () => listening ? stopRecording() : startRecording(),
+          disabled: !recSupported || !user,
+          children: /* @__PURE__ */ jsxDEV5("svg", { width: "18", height: "18", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": !0, children: /* @__PURE__ */ jsxDEV5("path", { d: "M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V20H8v2h8v-2h-3v-2.08A7 7 0 0 0 19 11h-2Z" }, void 0, !1, {
+            fileName: "app/routes/ocorrencias.$id.tsx",
+            lineNumber: 493,
+            columnNumber: 15
+          }, this) }, void 0, !1, {
+            fileName: "app/routes/ocorrencias.$id.tsx",
+            lineNumber: 492,
+            columnNumber: 13
+          }, this)
+        },
+        void 0,
+        !1,
+        {
+          fileName: "app/routes/ocorrencias.$id.tsx",
+          lineNumber: 478,
+          columnNumber: 11
+        },
+        this
+      ),
+      /* @__PURE__ */ jsxDEV5("button", { type: "submit", style: sendBtn, disabled: !user || !comment.trim(), children: [
         /* @__PURE__ */ jsxDEV5("span", { children: "Enviar" }, void 0, !1, {
           fileName: "app/routes/ocorrencias.$id.tsx",
-          lineNumber: 362,
+          lineNumber: 498,
           columnNumber: 13
         }, this),
         /* @__PURE__ */ jsxDEV5("svg", { width: "18", height: "18", viewBox: "0 0 256 256", fill: "currentColor", "aria-hidden": !0, children: /* @__PURE__ */ jsxDEV5("path", { d: "M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z" }, void 0, !1, {
           fileName: "app/routes/ocorrencias.$id.tsx",
-          lineNumber: 364,
+          lineNumber: 500,
           columnNumber: 15
         }, this) }, void 0, !1, {
           fileName: "app/routes/ocorrencias.$id.tsx",
-          lineNumber: 363,
+          lineNumber: 499,
           columnNumber: 13
         }, this)
       ] }, void 0, !0, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 361,
-        columnNumber: 9
+        lineNumber: 497,
+        columnNumber: 11
       }, this)
     ] }, void 0, !0, {
       fileName: "app/routes/ocorrencias.$id.tsx",
-      lineNumber: 353,
+      lineNumber: 466,
       columnNumber: 9
     }, this) }, void 0, !1, {
       fileName: "app/routes/ocorrencias.$id.tsx",
-      lineNumber: 352,
+      lineNumber: 465,
       columnNumber: 7
     }, this)
   ] }, void 0, !0, {
     fileName: "app/routes/ocorrencias.$id.tsx",
-    lineNumber: 268,
+    lineNumber: 384,
     columnNumber: 5
   }, this) : /* @__PURE__ */ jsxDEV5("div", { style: page, children: [
     /* @__PURE__ */ jsxDEV5("div", { style: header, children: [
       /* @__PURE__ */ jsxDEV5(Link2, { to: "/ocorrencias", style: backBtn, "aria-label": "Voltar", children: "\u2190" }, void 0, !1, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 249,
+        lineNumber: 365,
         columnNumber: 11
       }, this),
       /* @__PURE__ */ jsxDEV5("div", { style: logoWrap, children: /* @__PURE__ */ jsxDEV5("img", { src: "/images/LogoSemFundo.png", alt: "WalkSafe Logo", style: logo }, void 0, !1, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 253,
+        lineNumber: 369,
         columnNumber: 13
       }, this) }, void 0, !1, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 252,
+        lineNumber: 368,
         columnNumber: 11
       }, this),
       /* @__PURE__ */ jsxDEV5("div", { style: headerTitle, children: "Detalhe da Ocorr\xEAncia" }, void 0, !1, {
         fileName: "app/routes/ocorrencias.$id.tsx",
-        lineNumber: 255,
+        lineNumber: 371,
         columnNumber: 11
       }, this)
     ] }, void 0, !0, {
       fileName: "app/routes/ocorrencias.$id.tsx",
-      lineNumber: 248,
+      lineNumber: 364,
       columnNumber: 9
     }, this),
     /* @__PURE__ */ jsxDEV5("main", { style: main, children: /* @__PURE__ */ jsxDEV5("div", { style: card, children: /* @__PURE__ */ jsxDEV5("p", { style: { margin: 0 }, children: "Ocorr\xEAncia n\xE3o encontrada." }, void 0, !1, {
       fileName: "app/routes/ocorrencias.$id.tsx",
-      lineNumber: 260,
+      lineNumber: 376,
       columnNumber: 13
     }, this) }, void 0, !1, {
       fileName: "app/routes/ocorrencias.$id.tsx",
-      lineNumber: 259,
+      lineNumber: 375,
       columnNumber: 11
     }, this) }, void 0, !1, {
       fileName: "app/routes/ocorrencias.$id.tsx",
-      lineNumber: 258,
+      lineNumber: 374,
       columnNumber: 9
     }, this)
   ] }, void 0, !0, {
     fileName: "app/routes/ocorrencias.$id.tsx",
-    lineNumber: 247,
+    lineNumber: 363,
     columnNumber: 7
   }, this);
 }
@@ -1809,7 +1896,7 @@ function Login() {
 }
 
 // server-assets-manifest:@remix-run/dev/assets-manifest
-var assets_manifest_default = { entry: { module: "/build/entry.client-VKJPPSZD.js", imports: ["/build/_shared/chunk-O4BRYNJ4.js", "/build/_shared/chunk-FBPO4KJ3.js", "/build/_shared/chunk-PJSLJYSE.js", "/build/_shared/chunk-UWV35TSL.js", "/build/_shared/chunk-U4FRFQSK.js", "/build/_shared/chunk-XGOTYLZ5.js", "/build/_shared/chunk-7M6SC7J5.js", "/build/_shared/chunk-PNG5AS42.js"] }, routes: { root: { id: "root", parentId: void 0, path: "", index: void 0, caseSensitive: void 0, module: "/build/root-D3YB6TPY.js", imports: void 0, hasAction: !1, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/_index": { id: "routes/_index", parentId: "root", path: void 0, index: !0, caseSensitive: void 0, module: "/build/routes/_index-Q4GP324V.js", imports: ["/build/_shared/chunk-6GD5OBS7.js"], hasAction: !1, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/login": { id: "routes/login", parentId: "root", path: "login", index: void 0, caseSensitive: void 0, module: "/build/routes/login-24TQ3OIE.js", imports: ["/build/_shared/chunk-TC4XHIQS.js"], hasAction: !0, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/logout": { id: "routes/logout", parentId: "root", path: "logout", index: void 0, caseSensitive: void 0, module: "/build/routes/logout-GGSXPJWV.js", imports: void 0, hasAction: !0, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/ocorrencias.$id": { id: "routes/ocorrencias.$id", parentId: "root", path: "ocorrencias/:id", index: void 0, caseSensitive: void 0, module: "/build/routes/ocorrencias.$id-EM6DTQS2.js", imports: ["/build/_shared/chunk-UHKHII4F.js", "/build/_shared/chunk-TC4XHIQS.js"], hasAction: !1, hasLoader: !0, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/ocorrencias._index": { id: "routes/ocorrencias._index", parentId: "root", path: "ocorrencias", index: !0, caseSensitive: void 0, module: "/build/routes/ocorrencias._index-STDRV5VN.js", imports: ["/build/_shared/chunk-UHKHII4F.js", "/build/_shared/chunk-6GD5OBS7.js"], hasAction: !1, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/relatar": { id: "routes/relatar", parentId: "root", path: "relatar", index: void 0, caseSensitive: void 0, module: "/build/routes/relatar-BZ7NF44O.js", imports: ["/build/_shared/chunk-UHKHII4F.js", "/build/_shared/chunk-6GD5OBS7.js", "/build/_shared/chunk-TC4XHIQS.js"], hasAction: !1, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 } }, version: "ec3e0ffa", hmr: { runtime: "/build/_shared\\chunk-PJSLJYSE.js", timestamp: 1755451619553 }, url: "/build/manifest-EC3E0FFA.js" };
+var assets_manifest_default = { entry: { module: "/build/entry.client-VKJPPSZD.js", imports: ["/build/_shared/chunk-O4BRYNJ4.js", "/build/_shared/chunk-FBPO4KJ3.js", "/build/_shared/chunk-PJSLJYSE.js", "/build/_shared/chunk-UWV35TSL.js", "/build/_shared/chunk-U4FRFQSK.js", "/build/_shared/chunk-XGOTYLZ5.js", "/build/_shared/chunk-7M6SC7J5.js", "/build/_shared/chunk-PNG5AS42.js"] }, routes: { root: { id: "root", parentId: void 0, path: "", index: void 0, caseSensitive: void 0, module: "/build/root-D3YB6TPY.js", imports: void 0, hasAction: !1, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/_index": { id: "routes/_index", parentId: "root", path: void 0, index: !0, caseSensitive: void 0, module: "/build/routes/_index-Q4GP324V.js", imports: ["/build/_shared/chunk-6GD5OBS7.js"], hasAction: !1, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/login": { id: "routes/login", parentId: "root", path: "login", index: void 0, caseSensitive: void 0, module: "/build/routes/login-24TQ3OIE.js", imports: ["/build/_shared/chunk-TC4XHIQS.js"], hasAction: !0, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/logout": { id: "routes/logout", parentId: "root", path: "logout", index: void 0, caseSensitive: void 0, module: "/build/routes/logout-GGSXPJWV.js", imports: void 0, hasAction: !0, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/ocorrencias.$id": { id: "routes/ocorrencias.$id", parentId: "root", path: "ocorrencias/:id", index: void 0, caseSensitive: void 0, module: "/build/routes/ocorrencias.$id-G7N4E6RZ.js", imports: ["/build/_shared/chunk-UHKHII4F.js", "/build/_shared/chunk-TC4XHIQS.js"], hasAction: !1, hasLoader: !0, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/ocorrencias._index": { id: "routes/ocorrencias._index", parentId: "root", path: "ocorrencias", index: !0, caseSensitive: void 0, module: "/build/routes/ocorrencias._index-STDRV5VN.js", imports: ["/build/_shared/chunk-UHKHII4F.js", "/build/_shared/chunk-6GD5OBS7.js"], hasAction: !1, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 }, "routes/relatar": { id: "routes/relatar", parentId: "root", path: "relatar", index: void 0, caseSensitive: void 0, module: "/build/routes/relatar-BZ7NF44O.js", imports: ["/build/_shared/chunk-UHKHII4F.js", "/build/_shared/chunk-6GD5OBS7.js", "/build/_shared/chunk-TC4XHIQS.js"], hasAction: !1, hasLoader: !1, hasClientAction: !1, hasClientLoader: !1, hasErrorBoundary: !1 } }, version: "966f0730", hmr: { runtime: "/build/_shared\\chunk-PJSLJYSE.js", timestamp: 1755452610711 }, url: "/build/manifest-966F0730.js" };
 
 // server-entry-module:@remix-run/dev/server-build
 var mode = "development", assetsBuildDirectory = "public\\build", future = { v3_fetcherPersist: !1, v3_relativeSplatPath: !1, v3_throwAbortReason: !1, v3_routeConfig: !1, v3_singleFetch: !1, v3_lazyRouteDiscovery: !1, unstable_optimizeDeps: !1 }, publicPath = "/build/", entry = { module: entry_server_node_exports }, routes = {

@@ -1,7 +1,7 @@
 // app/routes/ocorrencias.$id.tsx
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { Form, useLoaderData, Link } from "@remix-run/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getSessionUser } from "~/utils/auth.client";
 import {
   addCommentToOccurrence,
@@ -9,7 +9,26 @@ import {
   type Occurrence,
 } from "~/utils/storage.client";
 
-// Loader só passa o ID (string codificada na URL)
+/** ====== Tipos mínimos para a Web Speech API (evita erro TS) ====== */
+type SpeechRecognitionEvent = Event & {
+  readonly results: SpeechRecognitionResultList;
+  readonly resultIndex: number;
+};
+type SpeechRecognitionCtor =
+  | (new () => {
+      lang: string;
+      interimResults: boolean;
+      continuous: boolean;
+      onstart: (() => void) | null;
+      onerror: ((e: any) => void) | null;
+      onend: (() => void) | null;
+      onresult: ((e: SpeechRecognitionEvent) => void) | null;
+      start: () => void;
+      stop: () => void;
+    })
+  | undefined;
+
+/** Loader só passa o ID (string codificada na URL) */
 export const loader = async ({ params }: LoaderFunctionArgs) => {
   return { id: params.id ?? null };
 };
@@ -19,6 +38,13 @@ export default function OcorrenciaDetalhe() {
   const [occurrence, setOccurrence] = useState<Occurrence | null>(null);
   const [user, setUser] = useState<string | null>(null);
 
+  // ======== Comentário e fala-para-texto ========
+  const [comment, setComment] = useState("");
+  const [recSupported, setRecSupported] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recRef = useRef<any | null>(null); // instancia do recognizer
+  const stopRequestedRef = useRef(false);
+
   useEffect(() => {
     if (!id) return;
     const decodedId = decodeURIComponent(id);
@@ -27,11 +53,87 @@ export default function OcorrenciaDetalhe() {
     setUser(getSessionUser());
   }, [id]);
 
+  // Descobre suporte à Web Speech API no cliente
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const AnyWin = window as any;
+    const SR: SpeechRecognitionCtor =
+      AnyWin.SpeechRecognition || AnyWin.webkitSpeechRecognition;
+    setRecSupported(Boolean(SR));
+    return () => {
+      // cleanup: para se estiver gravando
+      try {
+        recRef.current?.stop?.();
+      } catch {}
+    };
+  }, []);
+
+  const startRecording = () => {
+    if (!recSupported || listening || typeof window === "undefined") return;
+    const AnyWin = window as any;
+    const SR: SpeechRecognitionCtor =
+      AnyWin.SpeechRecognition || AnyWin.webkitSpeechRecognition;
+    if (!SR) return;
+
+    stopRequestedRef.current = false;
+    const rec = new SR();
+    rec.lang = "pt-BR";
+    rec.interimResults = true;
+    rec.continuous = true;
+
+    let partial = "";
+
+    rec.onstart = () => setListening(true);
+    rec.onerror = () => setListening(false);
+    rec.onend = () => {
+      setListening(false);
+      // Se não foi parada manualmente, tenta retomar (alguns browsers cortam sessão)
+      if (!stopRequestedRef.current) {
+        try {
+          rec.start();
+          setListening(true);
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    rec.onresult = (ev: SpeechRecognitionEvent) => {
+      partial = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const res = ev.results[i];
+        const txt = res[0].transcript;
+        if (res.isFinal) {
+          setComment((prev) => (prev ? (prev.trim() + " " + txt).trim() : txt));
+        } else {
+          partial += txt;
+        }
+      }
+      if (partial) {
+        setComment((prev) => (prev ? prev.replace(/\s+$/, "") + " " : "") + partial);
+      }
+    };
+
+    try {
+      rec.start();
+      recRef.current = rec;
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  };
+
+  const stopRecording = () => {
+    stopRequestedRef.current = true;
+    setListening(false);
+    try {
+      recRef.current?.stop?.();
+    } catch {}
+  };
+
   const handleCommentSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!occurrence || !user || !id) return;
-    const formData = new FormData(event.currentTarget);
-    const text = (formData.get("comment") as string)?.trim();
+    const text = comment.trim();
     if (!text) return;
 
     const decodedId = decodeURIComponent(id);
@@ -39,12 +141,12 @@ export default function OcorrenciaDetalhe() {
     setOccurrence((prev) =>
       prev ? { ...prev, comments: [...prev.comments, { author: user, text }] } : prev
     );
-    (event.target as HTMLFormElement).reset();
+    setComment("");
   };
 
   // --------- estilos base (iguais ao mock) ---------
   const colors = {
-    bg: "#d1fae5", // verde clarinho (fundo)
+    bg: "#d1fae5",
     white: "#ffffff",
     text: "#1c1c0d",
     text2: "#6c6c5f",
@@ -73,7 +175,8 @@ export default function OcorrenciaDetalhe() {
     gap: 8,
     background: colors.white,
     borderBottom: `1px solid ${colors.border}`,
-    padding: "10px 14px",
+    padding: "12px 16px",
+    minHeight: 64,
   };
 
   const backBtn: React.CSSProperties = {
@@ -93,17 +196,17 @@ export default function OcorrenciaDetalhe() {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    width: '100%',
-    height: '100%'
+    width: "100%",
+    height: "100%",
   };
 
-  const logo: React.CSSProperties = { maxHeight: 80, width: "auto" };
+  const logo: React.CSSProperties = { maxHeight: 90, width: "auto" };
 
   const headerTitle: React.CSSProperties = {
     gridColumn: "3 / 4",
     justifySelf: "center",
     fontWeight: 800,
-    fontSize: 16,
+    fontSize: 18,
     color: colors.brandDark,
   };
 
@@ -208,14 +311,28 @@ export default function OcorrenciaDetalhe() {
     alignItems: "center",
   };
 
-  const textarea: React.CSSProperties = {
+  const textareaStyle: React.CSSProperties = {
     flex: 1,
     borderRadius: 12,
     border: `1px solid #d1d5db`,
     padding: "12px 14px",
     minHeight: 40,
-    resize: "none" as const,
+    resize: "none",
     outline: "none",
+  };
+
+  const micBtn: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    border: "1px solid #d1d5db",
+    background: listening ? "#ef4444" : "#ffffff",
+    color: listening ? "#fff" : colors.brandDark,
+    cursor: recSupported ? "pointer" : "not-allowed",
+    opacity: recSupported ? 1 : 0.5,
   };
 
   const sendBtn: React.CSSProperties = {
@@ -232,7 +349,6 @@ export default function OcorrenciaDetalhe() {
   };
 
   const initials = useMemo(() => {
-    // gera iniciais para avatares improvisados
     const get = (name: string) =>
       name
         .split(/\s+/)
@@ -269,7 +385,6 @@ export default function OcorrenciaDetalhe() {
       {/* Header fixo */}
       <div style={header}>
         <Link to="/ocorrencias" style={backBtn} aria-label="Voltar">
-          {/* seta simples para manter o visual do mock */}
           <span style={{ fontSize: 18, lineHeight: 1 }}>←</span>
         </Link>
 
@@ -323,7 +438,6 @@ export default function OcorrenciaDetalhe() {
         <section style={card}>
           <h3 style={commentsHeader}>Comentários</h3>
 
-          {/* Lista */}
           <div>
             {occurrence.comments.length === 0 && (
               <p style={{ color: colors.text2, marginTop: 8 }}>
@@ -337,7 +451,6 @@ export default function OcorrenciaDetalhe() {
                 <div style={{ flex: 1 }}>
                   <div style={commentNameLine}>
                     <span style={commentName}>{c.author}</span>
-                    {/* tempo “fake” só para compor o layout */}
                     <span style={commentTime}>{i === 0 ? "2h atrás" : "1h atrás"}</span>
                   </div>
                   <div style={{ color: colors.text2, fontSize: 14 }}>{c.text}</div>
@@ -356,9 +469,32 @@ export default function OcorrenciaDetalhe() {
             placeholder={user ? "Adicionar comentário..." : "Faça login para comentar"}
             disabled={!user}
             rows={1}
-            style={textarea}
+            style={textareaStyle}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
           />
-        <button type="submit" style={sendBtn} disabled={!user}>
+
+          {/* 🎤 Botão de áudio-para-texto */}
+          <button
+            type="button"
+            aria-label={listening ? "Parar gravação" : "Gravar comentário por voz"}
+            title={
+              recSupported
+                ? listening
+                  ? "Parar"
+                  : "Falar"
+                : "Seu navegador não suporta gravação de voz"
+            }
+            style={micBtn}
+            onClick={() => (listening ? stopRecording() : startRecording())}
+            disabled={!recSupported || !user}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V20H8v2h8v-2h-3v-2.08A7 7 0 0 0 19 11h-2Z"/>
+            </svg>
+          </button>
+
+          <button type="submit" style={sendBtn} disabled={!user || !comment.trim()}>
             <span>Enviar</span>
             <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor" aria-hidden>
               <path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/>
