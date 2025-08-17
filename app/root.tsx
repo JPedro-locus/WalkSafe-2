@@ -28,7 +28,7 @@ export default function App() {
       </head>
       <body>
         <div className="container">
-          <Header />
+          {/* <Header /> */}
           <main>
             <Outlet />
           </main>

@@ -3,14 +3,14 @@ import { Form, useNavigate } from "@remix-run/react";
 import { useEffect, useState } from "react";
 import { getSessionUser } from "~/utils/auth.client";
 import { saveOccurrence, type Occurrence } from "~/utils/storage.client";
+import { BottomNav } from "~/components/BottomNav";
 
-type FormDataShape = Omit<Occurrence, "id" | "comments" | "hasBo"> & {
-  hasBo: string;
+type FormDataShape = {
+  local: string;
+  data: string;        // YYYY-MM-DDTHH:mm (datetime-local)
+  crime: string;
+  descricao: string;
   numeroBo?: string;
-  cep?: string;
-  bairro?: string;
-  cidade?: string;
-  estado?: string;
 };
 
 const crimeOptions = ["Roubo", "Furto", "Assédio", "Agressão", "Outro"];
@@ -22,270 +22,264 @@ export default function RelatarOcorrencia() {
     data: "",
     crime: "",
     descricao: "",
-    hasBo: "Não",
     numeroBo: "",
-    cep: "",
-    bairro: "",
-    cidade: "",
-    estado: "",
   });
   const [errors, setErrors] = useState<string[]>([]);
 
-  // Proteção de rota client‐side
   useEffect(() => {
-    if (!getSessionUser()) {
-      navigate("/login?redirectTo=/relatar");
-    }
+    if (!getSessionUser()) navigate("/login?redirectTo=/relatar");
   }, [navigate]);
 
-  // Quando o usuário sair do campo CEP
-  const handleCepBlur = async () => {
-    const rawCep = form.cep?.replace(/\D/g, "");
-    if (!rawCep || rawCep.length !== 8) return;
+  const brandBg = "#F3F6F4";  // cinza clarinho do app
+  const panelBg = "#FCFCF8";  // off-white do painel de conteúdo
+  const brandText = "#1c1c1c";
+  const brandMuted = "#6b7280";
+  const brandMint = "#E6FFF4";
+  const brandBlack = "#1c1c1c";
 
-    try {
-      const res = await fetch(`https://viacep.com.br/ws/${rawCep}/json/`);
-      const data = await res.json();
-      if (data.erro) throw new Error("CEP não encontrado");
-
-      setForm((f) => ({
-        ...f,
-        local: data.logradouro || f.local,
-        bairro: data.bairro || "",
-        cidade: data.localidade || "",
-        estado: data.uf || "",
-      }));
-    } catch {
-      setErrors((e) => [...e.filter((msg) => !msg.startsWith("CEP")), "CEP não encontrado ou inválido."]);
-    }
+  const page: React.CSSProperties = {
+    minHeight: "100svh",
+    background: brandBg,
+    color: brandText,
+    display: "flex",
+    flexDirection: "column",
   };
 
-  // Função de validação
+  // 🔑 LARGURA TOTAL + cresce até a BottomNav
+  const container: React.CSSProperties = {
+    flex: 1,
+    width: "100%",
+    display: "flex",
+    flexDirection: "column",
+    // padding lateral responsivo + espaço para a BottomNav fixa
+    padding: "20px clamp(12px, 4vw, 28px) calc(120px + env(safe-area-inset-bottom))",
+    boxSizing: "border-box",
+  };
+
+  // Faixa (painel) de conteúdo que ocupa 100% da largura disponível
+  const panel: React.CSSProperties = {
+    background: panelBg,
+    borderRadius: 12,
+    boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
+    padding: "clamp(16px, 3vw, 28px)",
+    display: "flex",
+    flexDirection: "column",
+    flex: 1, // 🔑 o painel ocupa a altura restante
+  };
+
+  const headerRow: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 6,
+    marginLeft:40
+  };
+
+  const logo: React.CSSProperties = { height: 140 , width: 'auto'};
+
+  const h1: React.CSSProperties = {
+    fontSize: "clamp(24px, 3vw, 36px)",
+    fontWeight: 800,
+    margin: "8px 0 18px",
+  };
+
+  // Formulário cresce dentro do painel
+  const formCol: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    gap: 14,
+    flex: 1,
+  };
+
+  const label: React.CSSProperties = { fontSize: 14, fontWeight: 600, marginBottom: 6 };
+
+  const inputBase: React.CSSProperties = {
+    width: "100%",
+    padding: "14px 16px",
+    borderRadius: 12,
+    border: "1px solid #D1D5DB",
+    background: "#fff",
+    fontSize: 16,
+    boxSizing: "border-box",
+  };
+
+  const select: React.CSSProperties = {
+    ...inputBase,
+    appearance: "none",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+    backgroundImage:
+      "linear-gradient(45deg, transparent 50%, #9CA3AF 50%), linear-gradient(135deg, #9CA3AF 50%, transparent 50%)",
+    backgroundPosition: "calc(100% - 24px) 18px, calc(100% - 18px) 18px",
+    backgroundSize: "6px 6px, 6px 6px",
+    backgroundRepeat: "no-repeat",
+  } as React.CSSProperties;
+
+  const textarea: React.CSSProperties = {
+    ...inputBase,
+    minHeight: 140,
+    resize: "vertical",
+    flex: 1, // 🔑 ajuda a “encher” a tela em monitores altos
+  };
+
+  const btnPrimary: React.CSSProperties = {
+    alignSelf: "stretch",
+    background: brandBlack,
+    color: "#fff",
+    padding: "14px 18px",
+    borderRadius: 12,
+    fontWeight: 800,
+    border: "none",
+    boxShadow: "0 10px 20px rgba(0,0,0,0.25)",
+    cursor: "pointer",
+    fontSize: 16,
+  };
+
+  const infoBox: React.CSSProperties = {
+    marginTop: 18,
+    background: brandMint,
+    borderRadius: 12,
+    padding: "14px 16px",
+    lineHeight: 1.5,
+  };
+
+  const errorBox: React.CSSProperties = {
+    background: "#FEE2E2",
+    color: "#991B1B",
+    padding: "10px 14px",
+    borderRadius: 12,
+    margin: "8px 0 12px",
+  };
+
   const validate = (d: FormDataShape): string[] => {
     const errs: string[] = [];
-
-    if (!d.local || d.local.trim().length < 5) {
-      errs.push("📍 O local deve ter ao menos 5 caracteres.");
-    }
-
-    const dt = new Date(d.data);
-    if (isNaN(dt.getTime())) {
-      errs.push("📅 Data inválida.");
-    } else if (dt > new Date()) {
-      errs.push("📅 A data não pode ser no futuro.");
-    }
-
-    if (!crimeOptions.includes(d.crime)) {
-      errs.push("🚨 Selecione um tipo de crime válido.");
-    }
-
-    if (!d.descricao || d.descricao.trim().length < 10) {
-      errs.push("📝 A descrição deve ter ao menos 10 caracteres.");
-    }
-
-    if (d.hasBo === "Sim" && d.numeroBo?.trim()) {
-      const boRegex = /^\d{4}-\d{6}-\d{2}$/;
-      if (!boRegex.test(d.numeroBo.trim())) {
-        errs.push("📎 Número do BO deve ser YYYY-######-## (ex: 2025-000123-01).");
-      }
-    }
-
-    if (d.cep && !/^\d{8}$/.test(d.cep.replace(/\D/g, ""))) {
-      errs.push("📮 CEP deve ter 8 dígitos numéricos.");
-    }
-
+    if (!d.local || d.local.trim().length < 3) errs.push("📍 Informe o local.");
+    if (!d.data) errs.push("📅 Informe a data e hora.");
+    if (!crimeOptions.includes(d.crime)) errs.push("🚨 Selecione o tipo de crime.");
+    if (!d.descricao || d.descricao.trim().length < 10) errs.push("📝 Descreva melhor o que aconteceu.");
+    if (d.numeroBo && !/^\d{4}-\d{6}-\d{2}$/.test(d.numeroBo.trim()))
+      errs.push("📎 Nº do BO deve ser YYYY-######-## (ex: 2025-000123-01).");
     return errs;
   };
 
-  // Handler de mudança em qualquer campo
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
     setForm((f) => ({ ...f, [name]: value }));
-    // limpa erro de CEP se usuário editar
-    if (name === "cep") setErrors((errs) => errs.filter((msg) => !msg.startsWith("📮") && !msg.startsWith("CEP")));
   };
 
-  // Submit
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fieldErrors = validate(form);
-    if (fieldErrors.length) {
-      setErrors(fieldErrors);
-      return;
-    }
+    if (fieldErrors.length) return setErrors(fieldErrors);
     setErrors([]);
 
+    const dateOnly = form.data.slice(0, 10);
     const payload: Omit<Occurrence, "id" | "comments"> = {
       local: form.local,
-      data: form.data,
+      data: dateOnly,
       crime: form.crime,
       descricao: form.descricao,
-      hasBo: form.hasBo === "Sim",
-      numeroBo: form.numeroBo,
-      // extras não salvos em Occurrence mas podem ser úteis:
-      // cep: form.cep, bairro: form.bairro, cidade: form.cidade, estado: form.estado
+      hasBo: Boolean(form.numeroBo && form.numeroBo.trim()),
+      numeroBo: form.numeroBo?.trim() || undefined,
     };
 
     const created = saveOccurrence(payload);
-    if (created) navigate(`/ocorrencias/${created.id}`);
+    if (created) navigate(`/ocorrencias/${encodeURIComponent(created.id)}`);
   };
 
   return (
-    <div className="container" style={{ marginTop: "2rem" }}>
-      <h2>Relatar Ocorrência</h2>
+    <div style={page}>
+      {/* Conteúdo ocupa a tela inteira (largura total) */}
+      <div style={container}>
+        <div style={panel}>
+          <div style={headerRow}>
+            <img src="/images/LogoSemFundo.png" alt="WalkSafe Logo" style={logo} />
 
-      {errors.length > 0 && (
-        <div className="error-box">
-          <ul>
-            {errors.map((err, i) => (
-              <li key={i}>{err}</li>
-            ))}
-          </ul>
+          </div>
+
+          <h1 style={h1}>Relatar Ocorrência</h1>
+
+          {errors.length > 0 && (
+            <div style={errorBox}>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {errors.map((err, i) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <Form onSubmit={handleSubmit} style={formCol}>
+            <div>
+              <label htmlFor="local" style={label}>Local</label>
+              <input
+                id="local" name="local" type="text"
+                placeholder="Digite o endereço ou aproxime"
+                value={form.local} onChange={handleChange} required
+                style={inputBase}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="data" style={label}>Data e Hora</label>
+              <input
+                id="data" name="data" type="datetime-local"
+                value={form.data} onChange={handleChange} required
+                style={inputBase}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="crime" style={label}>Tipo de crime</label>
+              <select
+                id="crime" name="crime" value={form.crime} onChange={handleChange} required
+                style={select}
+              >
+                <option value="">Selecione o tipo de crime</option>
+                {crimeOptions.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+              <label htmlFor="descricao" style={label}>Descrição</label>
+              <textarea
+                id="descricao" name="descricao"
+                placeholder="Descreva com detalhes o que aconteceu"
+                value={form.descricao} onChange={handleChange} required
+                style={textarea}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="numeroBo" style={label}>Boletim de Ocorrência (BO)</label>
+              <input
+                id="numeroBo" name="numeroBo" type="text"
+                placeholder="Nº do protocolo (opcional)"
+                value={form.numeroBo} onChange={handleChange}
+                style={inputBase}
+              />
+            </div>
+
+            <button type="submit" style={btnPrimary}>Enviar relato</button>
+          </Form>
+
+          <div style={infoBox}>
+            <strong style={{ display: "block", marginBottom: 6 }}>A importância do B.O.</strong>
+            <p style={{ margin: 0, color: brandMuted }}>
+              Registrar um Boletim de Ocorrência é fundamental. Ele oficializa o crime, permitindo que a polícia
+              investigue e ajuda a mapear áreas de risco, contribuindo para a segurança de todos.
+            </p>
+          </div>
         </div>
-      )}
-
-      <Form onSubmit={handleSubmit} className="form-container">
-        {/* CEP */}
-        <div className="form-group">
-          <label htmlFor="cep">📮 CEP (opcional)</label>
-          <input
-            type="text"
-            id="cep"
-            name="cep"
-            value={form.cep}
-            onChange={handleChange}
-            onBlur={handleCepBlur}
-            placeholder="Ex: 01001000"
-          />
-        </div>
-
-        {/* Rua / Local */}
-        <div className="form-group">
-          <label htmlFor="local">📍 Local / Rua</label>
-          <input
-            type="text"
-            id="local"
-            name="local"
-            value={form.local}
-            onChange={handleChange}
-            placeholder="Ex: Rua das Laranjeiras, Bairro Centro"
-            required
-          />
-        </div>
-
-        {/* Bairro */}
-        <div className="form-group">
-          <label htmlFor="bairro">🏘️ Bairro</label>
-          <input
-            type="text"
-            id="bairro"
-            name="bairro"
-            value={form.bairro}
-            onChange={handleChange}
-            placeholder="Preenchido pelo CEP"
-            disabled={!form.bairro}
-          />
-        </div>
-
-        {/* Cidade */}
-        <div className="form-group">
-          <label htmlFor="cidade">🌆 Cidade</label>
-          <input
-            type="text"
-            id="cidade"
-            name="cidade"
-            value={form.cidade}
-            onChange={handleChange}
-            placeholder="Preenchido pelo CEP"
-            disabled={!form.cidade}
-          />
-        </div>
-
-        {/* Estado */}
-        <div className="form-group">
-          <label htmlFor="estado">🗺️ Estado</label>
-          <input
-            type="text"
-            id="estado"
-            name="estado"
-            value={form.estado}
-            onChange={handleChange}
-            placeholder="Preenchido pelo CEP"
-            disabled={!form.estado}
-          />
-        </div>
-
-        {/* Data */}
-        <div className="form-group">
-          <label htmlFor="data">📅 Data</label>
-          <input type="date" id="data" name="data" value={form.data} onChange={handleChange} required />
-        </div>
-
-        {/* Crime */}
-        <div className="form-group">
-          <label htmlFor="crime">🚨 Tipo de crime</label>
-          <select id="crime" name="crime" value={form.crime} onChange={handleChange} required>
-            <option value="">Selecione</option>
-            {crimeOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Descrição */}
-        <div className="form-group">
-          <label htmlFor="descricao">📝 Descrição</label>
-          <textarea
-            id="descricao"
-            name="descricao"
-            value={form.descricao}
-            onChange={handleChange}
-            placeholder="Conte o que aconteceu..."
-            required
-          />
-        </div>
-
-        {/* BO */}
-        <div className="form-group">
-          <label>📄 Registrou BO?</label>
-          <select name="hasBo" value={form.hasBo} onChange={handleChange} required>
-            <option>Sim</option>
-            <option>Não</option>
-          </select>
-        </div>
-
-        {/* Número do BO */}
-        <div className="form-group">
-          <label htmlFor="numeroBo">📎 Nº do BO (opcional)</label>
-          <input
-            type="text"
-            id="numeroBo"
-            name="numeroBo"
-            value={form.numeroBo}
-            onChange={handleChange}
-            placeholder="Ex: 2025-000123-01"
-          />
-        </div>
-
-        <button type="submit" className="btn btn-primary">
-          Enviar relato
-        </button>
-      </Form>
-
-      <div className="info-box">
-        <h3>Por que registrar um BO?</h3>
-        <p>
-          Mesmo que pareça que "não vai dar em nada", o registro fortalece a
-          segurança pública.
-        </p>
-        <ul>
-          <li>Gera dados para pressionar autoridades</li>
-          <li>Serve como base legal para futuras condenações</li>
-          <li>Pode ser feito online, 100% gratuito</li>
-        </ul>
       </div>
+
+      {/* BottomNav fixa, como na home */}
+      <BottomNav />
     </div>
   );
 }
