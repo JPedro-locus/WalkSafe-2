@@ -17,7 +17,7 @@ export default function Index() {
         Descubra relatos recentes na sua região, compartilhe o que aconteceu com
         você e fortaleça a segurança de todos.
       </p>
-      <img
+      {/* <img
         src="/images/walkertalk.png"
         alt="Mapa colaborativo de segurança"
         style={{
@@ -28,7 +28,7 @@ export default function Index() {
           borderRadius: "12px",
           boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
         }}
-      />
+      /> */}
     </div>
   );
   
